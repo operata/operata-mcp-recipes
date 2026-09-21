@@ -1,0 +1,12 @@
+{
+  "incident": {
+    "id": "DINTG0003576",
+    "title": "Elevated call quality degradation reported by agents",
+    "severity": "High",
+    "metric": "Mean Opinion Score (MOS)",
+    "observedValue": 2.9,
+    "threshold": 3.5,
+    "window": "last 24 hours",
+    "notes": "Multiple agents reported choppy audio and one-way audio during customer calls."
+  }
+}

@@ -1,0 +1,10 @@
+# Per-recipe configuration, holds credentials
+config.env
+gateway-state.json
+out.json
+*.zip
+
+__pycache__/
+*.pyc
+.venv/
+.DS_Store
