@@ -54,7 +54,7 @@ Everything lives in `config.env`, which is gitignored.
 | Variable | What it is |
 | --- | --- |
 | `OPERATA_API_KEY` | Your key from Group Settings → API Management |
-| `OPERATA_MCP_ENDPOINT` | `https://api.operata.io/v1/mcp` for production, `https://api-dev.operata.io/v1/mcp` for dev. Must match the console the key came from |
+| `OPERATA_MCP_ENDPOINT` | The Operata MCP API-key endpoint, `https://api.operata.io/v1/mcp` |
 | `AWS_REGION` | Where the gateway and Lambda go |
 | `MODEL_ID` | Any Claude model your account can reach in that region |
 | `GATEWAY_NAME`, `TARGET_NAME`, `FUNCTION_NAME`, and the two role names | Change only if they collide with something you already own |
@@ -103,7 +103,7 @@ Deletes the Lambda, target, gateway, credential provider, and both roles. Nothin
 
 | Symptom | Cause |
 | --- | --- |
-| `Operata returned HTTP 401 for this key` during preflight | The key belongs to the other environment, or came from Settings → Config → API instead of Group Settings → API Management. |
+| `Operata returned HTTP 401 for this key` during preflight | The key came from Settings → Config → API instead of Group Settings → API Management, or it has been revoked. |
 | `403 Insufficient permissions` on the first Lambda run | The execution role is not visible to the gateway yet. `run-incident.sh` waits and retries once; if it persists, check `bedrock-agentcore:InvokeGateway` names the gateway ARN. |
 | Target reaches `SYNCHRONIZE_UNSUCCESSFUL` | The gateway could not complete `tools/list` upstream. Read `statusReasons` on the target. |
 | `temperature is deprecated for this model` | Newer Claude models reject `temperature` in `inferenceConfig`. Remove it. |

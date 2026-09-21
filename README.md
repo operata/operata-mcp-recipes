@@ -14,7 +14,7 @@ Every recipe follows the same shape: copy `config.env.example` to `config.env`, 
 
 You need an Operata API key from **Group Settings → API Management → Create New Key** in the Operata console. This is not the REST token under Settings → Config → API; the MCP endpoint rejects that one.
 
-Your key is fixed to the Operata group it was created in, and to the environment it came from. Keys minted at `app.operata.io` work against `https://api.operata.io/v1/mcp`; keys from `app-dev.operata.io` work against `https://api-dev.operata.io/v1/mcp`.
+Your key is fixed to the Operata group it was created in. Keys minted at `app.operata.io` work against `https://api.operata.io/v1/mcp`.
 
 Each recipe lists its own tooling and cloud prerequisites.
 

@@ -22,10 +22,10 @@ code=$(curl -sS -o /dev/null -w '%{http_code}' -m 30 -X POST "$OPERATA_MCP_ENDPO
 [ "$code" = "200" ] || die "Operata returned HTTP $code for this key against
   $OPERATA_MCP_ENDPOINT
 
-  A key works against one environment only. Keys from app-dev.operata.io need
-  https://api-dev.operata.io/v1/mcp; keys from app.operata.io need
-  https://api.operata.io/v1/mcp. Create the key under Group Settings >
-  API Management, not Settings > Config > API."
+  Create the key in the Operata console under Group Settings > API Management,
+  not Settings > Config > API — the MCP endpoint rejects the REST token. Check
+  the key has not been revoked, and that OPERATA_MCP_ENDPOINT in config.env
+  matches the Operata environment the key belongs to."
 info "Operata key accepted"
 
 step "[1/5] Gateway service role"
