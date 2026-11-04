@@ -17,8 +17,39 @@ step () { printf '\n\033[1m%s\033[0m\n' "$*"; }
 info () { printf '  %s\n' "$*"; }
 die  () { printf '\nError: %s\n' "$*" >&2; exit 1; }
 
+# What this recipe tags on the IAM roles and Lambda functions it creates.
+MANAGED_BY="operata-mcp-recipes/bedrock-agentcore"
+
+# No Operata key yet? deploy-standin.sh leaves a stand-in serving sample data.
+# While the key is still the placeholder, every script points at the stand-in.
+STANDIN_STATE="${STANDIN_STATE:-$ROOT/standin-state.json}"
+STANDIN_FUNCTION_NAME="${STANDIN_FUNCTION_NAME:-operata-mcp-standin}"
+STANDIN_ROLE_NAME="${STANDIN_ROLE_NAME:-OperataMcpStandinRole}"
+USING_STANDIN=no
+if [ "${OPERATA_API_KEY:-}" = "paste-your-key-here" ] && [ -f "$STANDIN_STATE" ]; then
+  command -v jq >/dev/null || die "jq is not installed."
+  OPERATA_API_KEY=$(jq -r .key "$STANDIN_STATE")
+  OPERATA_MCP_ENDPOINT=$(jq -r .url "$STANDIN_STATE")
+  export OPERATA_API_KEY OPERATA_MCP_ENDPOINT
+  USING_STANDIN=yes
+  echo "Using the stand-in (sample data): OPERATA_API_KEY in config.env is still the placeholder." >&2
+fi
+
 require_tools () {
   for c in "$@"; do command -v "$c" >/dev/null || die "$c is not installed."; done
+}
+
+# Only ever touch resources this recipe created. A name collision with
+# something of yours must not cost you the resource.
+lambda_is_ours () {
+  local arn; arn=$(aws lambda get-function --function-name "$1" --region "$AWS_REGION" \
+    --query Configuration.FunctionArn --output text 2>/dev/null) || return 1
+  [ "$(aws lambda list-tags --resource "$arn" --region "$AWS_REGION" \
+      --query 'Tags.ManagedBy' --output text 2>/dev/null)" = "$MANAGED_BY" ]
+}
+role_is_ours () {
+  [ "$(aws iam list-role-tags --role-name "$1" \
+      --query "Tags[?Key=='ManagedBy'].Value | [0]" --output text 2>/dev/null)" = "$MANAGED_BY" ]
 }
 
 require_state () {

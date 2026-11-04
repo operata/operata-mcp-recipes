@@ -7,7 +7,8 @@ step "[0/5] Preflight"
 require_tools aws curl jq
 curl --help all 2>/dev/null | grep -q -- --aws-sigv4 || die "curl lacks --aws-sigv4 (needs curl 7.75+)."
 [ -n "${OPERATA_API_KEY:-}" ] && [ "$OPERATA_API_KEY" != "paste-your-key-here" ] \
-  || die "Set OPERATA_API_KEY in config.env."
+  || die "Set OPERATA_API_KEY in config.env, or run ./scripts/deploy-standin.sh to try
+  the recipe with sample data first."
 
 ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text) \
   || die "No AWS credentials. Run 'aws sso login' or set AWS_PROFILE."
@@ -19,6 +20,13 @@ code=$(curl -sS -o /dev/null -w '%{http_code}' -m 30 -X POST "$OPERATA_MCP_ENDPO
   -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
   -H "Authorization: Bearer $OPERATA_API_KEY" \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}') || true
+if [ "$code" != "200" ] && [ "$USING_STANDIN" = yes ]; then
+  die "The stand-in returned HTTP $code at
+  $OPERATA_MCP_ENDPOINT
+
+  If the stand-in was deleted, re-run ./scripts/deploy-standin.sh. If its key no
+  longer matches standin-state.json, run ./scripts/teardown.sh, then deploy-standin.sh."
+fi
 [ "$code" = "200" ] || die "Operata returned HTTP $code for this key against
   $OPERATA_MCP_ENDPOINT
 
@@ -26,7 +34,15 @@ code=$(curl -sS -o /dev/null -w '%{http_code}' -m 30 -X POST "$OPERATA_MCP_ENDPO
   not Settings > Config > API — the MCP endpoint rejects the REST token. Check
   the key has not been revoked, and that OPERATA_MCP_ENDPOINT in config.env
   matches the Operata environment the key belongs to."
-info "Operata key accepted"
+if [ "$USING_STANDIN" = yes ]; then
+  info "stand-in key accepted"
+else
+  info "Operata key accepted"
+  if [ -f "$STANDIN_STATE" ]; then
+    info "the stand-in from deploy-standin.sh is still deployed at a public URL;"
+    info "teardown.sh removes it, along with everything else this recipe created"
+  fi
+fi
 
 step "[1/5] Gateway service role"
 if aws iam get-role --role-name "$GATEWAY_ROLE_NAME" >/dev/null 2>&1; then

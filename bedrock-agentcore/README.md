@@ -45,7 +45,19 @@ $EDITOR config.env          # set OPERATA_API_KEY, check the endpoint and region
 
 `deploy-gateway.sh` checks your Operata key against Operata before it creates anything in AWS, so a key from the wrong environment fails in the first few seconds rather than part-way through.
 
-Both deploy scripts are re-runnable. They reuse what exists and update it in place.
+The deploy scripts are re-runnable. They reuse what exists and update it in place.
+
+## No Operata key yet?
+
+Run the stand-in first, and the steps above work unchanged:
+
+```bash
+cp config.env.example config.env   # leave OPERATA_API_KEY as the placeholder
+./scripts/deploy-standin.sh        # a Lambda that serves the twelve Operata tools with sample data
+./scripts/deploy-gateway.sh        # ...then verify, deploy-lambda and run-incident as above
+```
+
+The stand-in answers the tool names and arguments in the [Operata MCP tool reference](https://docs.operata.com/docs/guides-mcp-tools) at the time of writing (2026-11), listed in `standin/tools.json`, behind the same `Authorization: Bearer` check, so the gateway, the credential provider, the Lambda and Claude all run for real. Only the data is fixed: one ISP in one city dragging MOS down, and every tool result says it is sample data. When you have a key, paste it into `config.env` and re-run `deploy-gateway.sh`; the gateway switches to Operata in place. The stand-in stays deployed at its public URL until you run `teardown.sh`.
 
 ## Configuration
 
@@ -90,13 +102,14 @@ Copy the first two into an existing function, set `GATEWAY_URL` and `MODEL_ID`, 
 ./scripts/teardown.sh
 ```
 
-Deletes the Lambda, target, gateway, credential provider, and both roles. Nothing else in your account is touched.
+Deletes the Lambda, target, gateway, credential provider, and both roles, plus the stand-in if you deployed it. Nothing else in your account is touched.
 
 ## Limits
 
 - An API key is fixed to the group it was created in. `switch_group` to a different group returns `403 "API key access is restricted to its own group"`.
 - Operata rate-limits to 100 requests per minute per key, shared across every caller of the gateway.
 - The gateway indexes the tool list when the target is created. After Operata changes a tool, re-run `deploy-gateway.sh` or call `SynchronizeGatewayTargets`.
+- The stand-in needs a public Lambda function URL, guarded by its own key, which sits in the function's environment variables. Requests with the wrong key are still invoked and billed, so `deploy-standin.sh` reserves a concurrency of 5 where the account has spare concurrency, and warns if it cannot. Run `teardown.sh` when you have finished trying it. Some organisations block public function URLs; there, use a real Operata key.
 - `deploy-gateway.sh` sets `exceptionLevel: DEBUG` so target errors come back readable. Remove it before production, because it exposes upstream detail in responses.
 
 ## Troubleshooting
@@ -104,6 +117,7 @@ Deletes the Lambda, target, gateway, credential provider, and both roles. Nothin
 | Symptom | Cause |
 | --- | --- |
 | `Operata returned HTTP 401 for this key` during preflight | The key came from Settings → Config → API instead of Group Settings → API Management, or it has been revoked. |
+| `The stand-in returned HTTP 401` during preflight | The key in `standin-state.json` is not the one the function holds. Run `teardown.sh`, then `deploy-standin.sh` again. |
 | `403 Insufficient permissions` on the first Lambda run | The execution role is not visible to the gateway yet. `run-incident.sh` waits and retries once; if it persists, check `bedrock-agentcore:InvokeGateway` names the gateway ARN. |
 | Target reaches `SYNCHRONIZE_UNSUCCESSFUL` | The gateway could not complete `tools/list` upstream. Read `statusReasons` on the target. |
 | `temperature is deprecated for this model` | Newer Claude models reject `temperature` in `inferenceConfig`. Remove it. |

@@ -3,21 +3,6 @@
 . "$(dirname "$0")/_common.sh"
 require_tools aws jq
 
-MANAGED_BY="operata-mcp-recipes/bedrock-agentcore"
-
-# Only ever delete resources this recipe created. A name collision with
-# something of yours must not cost you the resource.
-lambda_is_ours () {
-  local arn; arn=$(aws lambda get-function --function-name "$1" --region "$AWS_REGION" \
-    --query Configuration.FunctionArn --output text 2>/dev/null) || return 1
-  [ "$(aws lambda list-tags --resource "$arn" --region "$AWS_REGION" \
-      --query 'Tags.ManagedBy' --output text 2>/dev/null)" = "$MANAGED_BY" ]
-}
-role_is_ours () {
-  [ "$(aws iam list-role-tags --role-name "$1" \
-      --query "Tags[?Key=='ManagedBy'].Value | [0]" --output text 2>/dev/null)" = "$MANAGED_BY" ]
-}
-
 if [ -f "$STATE_FILE" ]; then
   GATEWAY_ID=$(jq -r .gatewayId "$STATE_FILE"); TARGET_ID=$(jq -r .targetId "$STATE_FILE")
 else
@@ -33,6 +18,11 @@ info "target    $TARGET_ID"
 info "gateway   $GATEWAY_ID"
 info "provider  $PROVIDER_NAME"
 info "roles     $GATEWAY_ROLE_NAME, $LAMBDA_ROLE_NAME"
+# Found by name and tag, so it is cleaned up even if standin-state.json is gone.
+if [ -f "$STANDIN_STATE" ] || lambda_is_ours "$STANDIN_FUNCTION_NAME" \
+   || role_is_ours "$STANDIN_ROLE_NAME"; then
+  info "stand-in  $STANDIN_FUNCTION_NAME, $STANDIN_ROLE_NAME"
+fi
 if [ "${FORCE:-no}" != "yes" ]; then
   read -r -p "Proceed? [y/N] " a; [ "$a" = "y" ] || { echo "Aborted."; exit 0; }
 fi
@@ -70,5 +60,40 @@ for R in "$GATEWAY_ROLE_NAME:OperataGatewayOutboundAuth" "$LAMBDA_ROLE_NAME:Oper
   aws iam delete-role --role-name "$RN" >/dev/null 2>&1 && info "role $RN deleted" || info "role $RN already gone"
 done
 
+STANDIN_CLEAN=yes
+if aws lambda get-function --function-name "$STANDIN_FUNCTION_NAME" --region "$AWS_REGION" >/dev/null 2>&1; then
+  if lambda_is_ours "$STANDIN_FUNCTION_NAME"; then
+    # The URL config goes with the function. Remove it first anyway, so the public
+    # URL is closed even if delete-function then fails.
+    aws lambda delete-function-url-config --function-name "$STANDIN_FUNCTION_NAME" \
+      --region "$AWS_REGION" >/dev/null 2>&1 || true
+    if aws lambda delete-function --function-name "$STANDIN_FUNCTION_NAME" --region "$AWS_REGION" >/dev/null; then
+      info "stand-in deleted"
+    else
+      info "stand-in $STANDIN_FUNCTION_NAME could not be deleted"; STANDIN_CLEAN=no
+    fi
+  else
+    info "stand-in $STANDIN_FUNCTION_NAME not created by this recipe, left alone"
+  fi
+fi
+if aws iam get-role --role-name "$STANDIN_ROLE_NAME" >/dev/null 2>&1; then
+  if role_is_ours "$STANDIN_ROLE_NAME"; then
+    aws iam delete-role-policy --role-name "$STANDIN_ROLE_NAME" --policy-name OperataMcpStandin >/dev/null 2>&1 || true
+    if aws iam delete-role --role-name "$STANDIN_ROLE_NAME" >/dev/null; then
+      info "role $STANDIN_ROLE_NAME deleted"
+    else
+      info "role $STANDIN_ROLE_NAME could not be deleted"; STANDIN_CLEAN=no
+    fi
+  else
+    info "role $STANDIN_ROLE_NAME not created by this recipe, left alone"
+  fi
+fi
+
 rm -f "$STATE_FILE"
+# Keep standin-state.json until the stand-in is really gone: it is the only record of its URL.
+if [ "$STANDIN_CLEAN" = yes ]; then
+  rm -f "$STANDIN_STATE"
+else
+  die "The stand-in is not fully removed (see above). Fix the error and re-run teardown.sh."
+fi
 step "Done"

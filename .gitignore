@@ -1,6 +1,7 @@
 # Per-recipe configuration, holds credentials
 config.env
 gateway-state.json
+standin-state.json
 out.json
 *.zip
 
