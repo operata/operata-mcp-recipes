@@ -43,7 +43,7 @@ $EDITOR config.env          # set OPERATA_API_KEY, check the endpoint and region
 ./scripts/run-incident.sh   # invoke with events/incident.json and print the diagnosis
 ```
 
-`deploy-gateway.sh` checks your Operata key against Operata before it creates anything in AWS, so a key from the wrong environment fails in the first few seconds rather than part-way through.
+`deploy-gateway.sh` checks your Operata key against Operata, and that Bedrock can invoke `MODEL_ID`, before it creates anything in AWS, so a key from the wrong environment or a model the account cannot use fails in the first few seconds rather than part-way through.
 
 Both deploy scripts are re-runnable. They reuse what exists and update it in place.
 
@@ -107,6 +107,7 @@ Deletes the Lambda, target, gateway, credential provider, and both roles. Nothin
 | `403 Insufficient permissions` on the first Lambda run | The execution role is not visible to the gateway yet. `run-incident.sh` waits and retries once; if it persists, check `bedrock-agentcore:InvokeGateway` names the gateway ARN. |
 | Target reaches `SYNCHRONIZE_UNSUCCESSFUL` | The gateway could not complete `tools/list` upstream. Read `statusReasons` on the target. |
 | `temperature is deprecated for this model` | Newer Claude models reject `temperature` in `inferenceConfig`. Remove it. |
+| `Bedrock cannot invoke <model>` during preflight | The check runs with your credentials, not the Lambda's role. Read the error under it: Anthropic use case details not submitted, or `MODEL_ID` not available to the account in that region. |
 | `Unsupported protocol version` | The client negotiates from what the gateway advertises. Remove any pinned version. |
 | `curl lacks --aws-sigv4` | curl is older than 7.75. On macOS, `brew install curl`. |
 

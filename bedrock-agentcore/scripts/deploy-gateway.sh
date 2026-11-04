@@ -28,6 +28,27 @@ code=$(curl -sS -o /dev/null -w '%{http_code}' -m 30 -X POST "$OPERATA_MCP_ENDPO
   matches the Operata environment the key belongs to."
 info "Operata key accepted"
 
+# Check the model the same way. An account that cannot invoke MODEL_ID would
+# otherwise only find out at run-incident.sh, after everything has been built.
+if ! err=$(aws bedrock-runtime converse --region "$AWS_REGION" --model-id "$MODEL_ID" \
+     --messages '[{"role":"user","content":[{"text":"ping"}]}]' \
+     --inference-config '{"maxTokens":1}' 2>&1 >/dev/null); then
+  err=$(printf '%s\n' "$err" | sed '/^[[:space:]]*$/d')
+  case "$err" in
+    *"use case details"*)
+      hint="Submit the Anthropic use case details for this account in the Bedrock console, then retry in about 15 minutes." ;;
+    *"not available for this account"*|*"end of its life"*)
+      hint="Set MODEL_ID to a Claude model this account can use. List them:
+  aws bedrock list-inference-profiles --region $AWS_REGION" ;;
+    *) hint="Check MODEL_ID and that the model is offered in $AWS_REGION." ;;
+  esac
+  die "Bedrock cannot invoke $MODEL_ID in $AWS_REGION:
+  $err
+
+  $hint"
+fi
+info "model $MODEL_ID reachable"
+
 step "[1/5] Gateway service role"
 if aws iam get-role --role-name "$GATEWAY_ROLE_NAME" >/dev/null 2>&1; then
   info "reusing $GATEWAY_ROLE_NAME"
@@ -112,7 +133,9 @@ TARGET_ID=$(aws bedrock-agentcore-control list-gateway-targets \
   --query "items[?name=='$TARGET_NAME'].targetId | [0]" --output text)
 # Operata authenticates with `Authorization: Bearer <key>`, so the credential
 # goes in the standard header with a Bearer prefix.
-TC=$(jq -nc --arg e "$OPERATA_MCP_ENDPOINT" '{mcp:{mcpServer:{endpoint:$e,listingMode:"DEFAULT"}}}')
+# listingMode is left out: the gateway's default caches the tool list, and the
+# field is rejected by AWS CLI releases older than 2.34.33.
+TC=$(jq -nc --arg e "$OPERATA_MCP_ENDPOINT" '{mcp:{mcpServer:{endpoint:$e}}}')
 CC=$(jq -nc --arg a "$PROVIDER_ARN" '[{credentialProviderType:"API_KEY",
       credentialProvider:{apiKeyCredentialProvider:{providerArn:$a,
         credentialLocation:"HEADER",credentialParameterName:"Authorization",
